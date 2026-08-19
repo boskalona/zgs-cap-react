@@ -60,6 +60,7 @@ export default function App() {
   const [rows, setRows] = useState([])
   const [company, setCompany] = useState('')
   const [busy, setBusy] = useState(false)
+  const [byCompany, setByCompany] = useState([])   // ผลจาก function totalByCompany()
 
   const load = async (filter) => {
     setBusy(true)
@@ -71,7 +72,16 @@ export default function App() {
     setBusy(false)
   }
 
-  useEffect(() => { load('') }, [])
+  // เรียก custom function totalByCompany() มาโชว์เป็นสรุป
+  const loadTotals = async () => {
+    try {
+      const res = await fetch('/odata/v4/zgs/totalByCompany()')
+      const data = await res.json()
+      setByCompany(data.value || [])
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => { load(''); loadTotals() }, [])
 
   const kpis = useMemo(() => {
     const total = rows.reduce((s, r) => s + Number(r.AmountInCompanyCurrency || 0), 0)
@@ -94,6 +104,36 @@ export default function App() {
             <Kpi label="Journal Entries" value={kpis.count} sub="Rows returned" />
             <Kpi label="Company Codes" value={kpis.companies} sub="Distinct companies" />
           </FlexBox>
+
+          {/* Total by Company — จาก custom function totalByCompany() */}
+          <Card>
+            <div style={{ padding: '1rem 1.25rem' }}>
+              <Title level="H5" style={{ marginBottom: '0.75rem' }}>
+                Total by Company <span style={{ color: 'var(--sapNeutralColor)', fontWeight: 400, fontSize: '13px' }}>· via totalByCompany()</span>
+              </Title>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', color: 'var(--sapNeutralColor)', fontSize: '12px' }}>
+                    <th style={{ padding: '6px 8px' }}>Company</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>Total (THB)</th>
+                    <th style={{ padding: '6px 8px', textAlign: 'right' }}>Entries</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {byCompany.length === 0 && (
+                    <tr><td colSpan={3} style={{ padding: '6px 8px', color: 'var(--sapNeutralColor)' }}>—</td></tr>
+                  )}
+                  {byCompany.map((r, i) => (
+                    <tr key={i} style={{ borderTop: '1px solid var(--sapList_BorderColor)' }}>
+                      <td style={{ padding: '6px 8px', fontWeight: 600 }}>{r.CompanyCode}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(r.total)}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{r.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
 
           {/* Filter card */}
           <Card>
