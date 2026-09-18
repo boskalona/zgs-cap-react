@@ -25,7 +25,9 @@ const previewColumns = [
   { Header: 'Amount', accessor: 'grossAmount', width: 120, hAlign: 'End' },
   { Header: 'PO', accessor: 'purchaseOrder', width: 120 },
   { Header: 'Item', accessor: 'purchaseOrderItem', width: 70 },
+  { Header: 'G/L', accessor: 'glAccount', width: 100 },
   { Header: 'Tax', accessor: 'taxCode', width: 60 },
+  { Header: 'BP', accessor: 'businessPlace', width: 60 },
   { Header: 'Qty', accessor: 'quantity', width: 60, hAlign: 'End' },
   { Header: 'UoM', accessor: 'quantityUnit', width: 60 },
   { Header: 'Mat.Doc', accessor: 'referenceDocument', width: 105 },
@@ -46,7 +48,12 @@ const itemColumns = [
   },
   { Header: 'Vendor', accessor: 'vendorCode', width: 100 },
   { Header: 'CC', accessor: 'companyCode', width: 60 },
-  { Header: 'PO', accessor: 'purchaseOrder', width: 115 },
+  {
+    Header: 'PO / G/L', accessor: 'purchaseOrder', width: 130,
+    Cell: ({ row }) => row.original.purchaseOrder
+      ? `PO ${row.original.purchaseOrder}`
+      : <Text style={{ color: 'var(--sapNeutralColor)' }}>G/L {row.original.glAccount}</Text>
+  },
   {
     Header: 'Amount', accessor: 'grossAmount', width: 110, hAlign: 'End',
     Cell: ({ value }) => fmt2(value)
@@ -206,10 +213,15 @@ export default function InvoiceUpload() {
           {parsed && <Text>{parsed.fileName} — <b>{parsed.rows.length}</b> แถว</Text>}
         </FlexBox>
         <Text style={{ display: 'block', marginTop: '0.5rem', color: 'var(--sapNeutralColor)', fontSize: 12 }}>
-          <b>คอลัมน์ที่ต้องมี</b> (PO-based): {TEMPLATE_HEADERS.join(' · ')}
+          <b>คอลัมน์ที่ต้องมี</b>: {TEMPLATE_HEADERS.slice(0, 6).join(' · ')}
+          {' '}แล้วเลือกอย่างใดอย่างหนึ่ง → <b>PO Number + PO Item</b> (PO-based)
+          {' '}หรือ <b>GL Account</b> (Non-PO ลงบัญชีตรง ๆ)
         </Text>
         <Text style={{ display: 'block', marginTop: '0.25rem', color: 'var(--sapNeutralColor)', fontSize: 12 }}>
-          <b>ใส่ก็ได้</b>: {OPTIONAL_HEADERS.join(' · ')} — ไม่กรอก = ใช้ account assignment ของ PO ตามปกติ
+          <b>ใส่ก็ได้</b>: {OPTIONAL_HEADERS.join(' · ')}
+        </Text>
+        <Text style={{ display: 'block', marginTop: '0.25rem', color: 'var(--sapNeutralColor)', fontSize: 12 }}>
+          💡 company code 6810: Tax Code <b>V0</b> · Business Place <b>0000</b> · งวดที่เปิด <b>08/2026</b>
           {' · '}ไม่ต้องกรอก Segment (S/4 derive จาก Profit Center ให้เอง)
         </Text>
       </Step>

@@ -15,15 +15,17 @@ import * as XLSX from 'xlsx'
 /** header ที่ต้องมี (PO-based) */
 export const TEMPLATE_HEADERS = [
     'Vendor Code', 'Company Code', 'Document Date', 'Posting Date',
-    'Currency', 'Gross Amount', 'PO Number', 'PO Item'
+    'Currency', 'Gross Amount',
+    // เลือกอย่างใดอย่างหนึ่ง: มี PO Number = PO-based · ไม่มี = Non-PO ต้องมี GL Account
+    'PO Number', 'PO Item', 'GL Account'
 ]
 
 /** header ที่ใส่ก็ได้ไม่ใส่ก็ได้ — account assignment
  *  ไม่กรอก = ให้ S/4 ใช้ของ PO ตามปกติ (ปลอดภัยที่สุด)
  *  💡 FI Segment ไม่ต้องกรอก — S/4 derive จาก Profit Center ให้เอง */
 export const OPTIONAL_HEADERS = [
-    // S/4 มักบังคับตอนโพสต์ PO-based (ไทยใช้ Tax Code V0/V1 · UoM ต้องตรงกับ PO)
-    'Tax Code', 'Quantity', 'UoM',
+    // S/4 มักบังคับตอนโพสต์ (ไทยใช้ Tax Code V0/V1 · Business Place = รหัสสาขาภาษี)
+    'Tax Code', 'Business Place', 'Quantity', 'UoM',
     // GR-based invoice verification (อ้างเอกสารรับของ)
     'Material Document', 'Material Document Year', 'Material Document Item',
     // service PO (lean services)
@@ -48,6 +50,7 @@ const FIELD_ALIASES = {
     glAccount: ['glaccount', 'gl', 'account', 'hkont'],
     // S/4 บังคับตอนโพสต์ PO-based
     taxCode: ['taxcode', 'tax', 'mwskz'],
+    businessPlace: ['businessplace', 'branch', 'branchcode', 'bupla'],
     quantity: ['quantity', 'qty', 'menge', 'invoicequantity'],
     quantityUnit: ['quantityunit', 'uom', 'unit', 'meins', 'baseunit'],
     // GR-based invoice verification
@@ -137,21 +140,29 @@ export function downloadTemplate() {
     const row = (v) => cols.map(h => v[h] ?? '').join(',')
     const csv = [
         cols.join(','),
-        // แถว 1: PO วัสดุ ปกติ — ใส่ tax/qty/uom ให้ครบ (S/4 บังคับ)
+        // แถว 1: Non-PO — ชุดนี้โพสต์ผ่านจริงแล้ว (ไม่ต้องมี PO / ไม่แตะบัญชีพัก GR-IR)
+        row({
+            'Vendor Code': '1000000', 'Company Code': '6810',
+            'Document Date': '2026-08-31', 'Posting Date': '2026-08-31',
+            'Currency': 'THB', 'Gross Amount': '100.00',
+            'GL Account': '65001000', 'Cost Center': '68101101',
+            'Tax Code': 'V0', 'Business Place': '0000'
+        }),
+        // แถว 2: Non-PO + ระบุ Profit Center เอง (Segment จะ derive ตามให้)
+        row({
+            'Vendor Code': '1000000', 'Company Code': '6810',
+            'Document Date': '2026-08-31', 'Posting Date': '2026-08-31',
+            'Currency': 'THB', 'Gross Amount': '250.00',
+            'GL Account': '63005000', 'Cost Center': '68101201',
+            'Tax Code': 'V0', 'Business Place': '0000', 'Profit Center': 'YB101'
+        }),
+        // แถว 3: PO-based — ต้องมี tax/qty/uom และ S/4 ต้อง config บัญชี GR-IR (WRX) ไว้ก่อน
         row({
             'Vendor Code': '1000000', 'Company Code': '6810',
             'Document Date': '2026-08-31', 'Posting Date': '2026-08-31',
             'Currency': 'THB', 'Gross Amount': '100.00',
             'PO Number': '4500000041', 'PO Item': '10',
-            'Tax Code': 'V0', 'Quantity': '1', 'UoM': 'PC'
-        }),
-        // แถว 2: ระบุ Profit Center เอง (Segment จะ derive ตามให้)
-        row({
-            'Vendor Code': '1000000', 'Company Code': '6810',
-            'Document Date': '2026-08-31', 'Posting Date': '2026-08-31',
-            'Currency': 'THB', 'Gross Amount': '250.00',
-            'PO Number': '4500000042', 'PO Item': '10',
-            'Tax Code': 'V0', 'Quantity': '1', 'UoM': 'PC', 'Profit Center': '1301'
+            'Tax Code': 'V0', 'Business Place': '0000', 'Quantity': '1', 'UoM': 'PC'
         })
     ].join('\r\n')
     const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }))
