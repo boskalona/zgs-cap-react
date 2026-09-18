@@ -1,137 +1,78 @@
-import { useEffect, useMemo, useState } from 'react'
-import {
-  ThemeProvider, ShellBar, Card, CardHeader, AnalyticalTable,
-  FlexBox, Title, Text, Label, Input, Button, ObjectStatus, Icon, Bar, Toolbar, ToolbarSpacer
-} from '@ui5/webcomponents-react'
-import { BarChart, DonutChart } from '@ui5/webcomponents-react-charts'
+import { useState } from 'react'
+import { ThemeProvider, ShellBar, ShellBarItem, Icon } from '@ui5/webcomponents-react'
+import JournalDashboard from './pages/JournalDashboard'
+import InvoiceUpload from './pages/InvoiceUpload'
+
+// icons ที่ใช้ทั้งแอป (UI5 web components ต้อง import ทีละตัว)
 import '@ui5/webcomponents-icons/dist/money-bills.js'
 import '@ui5/webcomponents-icons/dist/list.js'
 import '@ui5/webcomponents-icons/dist/trend-up.js'
 import '@ui5/webcomponents-icons/dist/trend-down.js'
 import '@ui5/webcomponents-icons/dist/business-objects-experience.js'
+import '@ui5/webcomponents-icons/dist/upload.js'
+import '@ui5/webcomponents-icons/dist/download.js'
+import '@ui5/webcomponents-icons/dist/save.js'
+import '@ui5/webcomponents-icons/dist/paper-plane.js'
+import '@ui5/webcomponents-icons/dist/synchronize.js'
+import '@ui5/webcomponents-icons/dist/refresh.js'
+import '@ui5/webcomponents-icons/dist/accept.js'
+import '@ui5/webcomponents-icons/dist/circle-task-2.js'
+import '@ui5/webcomponents-icons/dist/bar-chart.js'
 
-const fmt = (n) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
-const fmt2 = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-const columns = [
-  { Header: 'Company', accessor: 'CompanyCode', width: 90 },
-  { Header: 'Company Name', accessor: 'CompanyCodeName', width: 150 },
-  { Header: 'Year', accessor: 'FiscalYear', width: 70 },
-  { Header: 'Per.', accessor: 'FiscalPeriod', width: 60 },
-  { Header: 'G/L', accessor: 'GLAccountDisplay', width: 100 },
-  { Header: 'G/L Name', accessor: 'GLAccountName', width: 170 },
-  { Header: 'Segment', accessor: 'SegmentName', width: 120 },
-  {
-    Header: 'Amount', accessor: 'AmountInCompanyCurrency', hAlign: 'End', width: 140,
-    Cell: ({ value }) => <ObjectStatus state={Number(value) < 0 ? 'Negative' : 'Positive'}>{fmt2(value)}</ObjectStatus>
-  },
-  {
-    Header: 'Dir.', accessor: 'Direction', width: 90,
-    Cell: ({ value }) => <ObjectStatus state={value === 'Credit' ? 'Negative' : 'Positive'}>{value}</ObjectStatus>
-  }
+const PAGES = [
+  { key: 'journal', text: 'Journal Analytics', icon: 'bar-chart', el: <JournalDashboard /> },
+  { key: 'invoice', text: 'Upload Supplier Invoice', icon: 'upload', el: <InvoiceUpload /> }
 ]
 
-function Kpi({ icon, label, value, sub, accent }) {
-  return (
-    <Card style={{ minWidth: '200px', flex: '1 1 200px' }}>
-      <div style={{ padding: '1rem 1.15rem', display: 'flex', gap: '0.85rem', alignItems: 'center' }}>
-        <div style={{
-          width: 46, height: 46, borderRadius: 12, flex: 'none', display: 'grid', placeItems: 'center',
-          background: accent || 'var(--sapButton_Emphasized_Background)'
-        }}>
-          <Icon name={icon} style={{ color: '#fff', width: 22, height: 22 }} />
-        </div>
-        <div style={{ minWidth: 0 }}>
-          <Label>{label}</Label>
-          <Title level="H3" style={{ margin: '2px 0' }}>{value}</Title>
-          {sub && <Text style={{ color: 'var(--sapNeutralColor)', fontSize: '12px' }}>{sub}</Text>}
-        </div>
-      </div>
-    </Card>
-  )
-}
-
 export default function App() {
-  const [rows, setRows] = useState([])
-  const [company, setCompany] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const load = async (filter) => {
-    setBusy(true)
-    let url = '/odata/v4/zgs/JournalEntryItem?$orderby=CompanyCode,FiscalYear,FiscalPeriod'
-    if (filter) url += `&$filter=CompanyCode eq '${filter}'`
-    const res = await fetch(url)
-    const data = await res.json()
-    setRows(data.value || [])
-    setBusy(false)
-  }
-  useEffect(() => { load('') }, [])
-
-  const m = useMemo(() => {
-    let debit = 0, credit = 0
-    const period = {}
-    for (const r of rows) {
-      const a = Number(r.AmountInCompanyCurrency || 0)
-      if (a < 0) credit += Math.abs(a); else debit += a
-      const p = `${r.FiscalYear}/${String(r.FiscalPeriod).padStart(3, '0')}`
-      period[p] = (period[p] || 0) + a
-    }
-    const byPeriod = Object.entries(period).sort().map(([Period, Amount]) => ({ Period, Amount: Math.round(Amount) }))
-    const dir = [{ name: 'Debit', val: Math.round(debit) }, { name: 'Credit', val: Math.round(credit) }]
-    return {
-      debit, credit, net: debit - credit, count: rows.length,
-      companies: new Set(rows.map(r => r.CompanyCode)).size, byPeriod, dir
-    }
-  }, [rows])
+  const [page, setPage] = useState('journal')
+  const active = PAGES.find(p => p.key === page)
 
   return (
     <ThemeProvider>
       <div style={{ minHeight: '100vh', background: 'var(--sapBackgroundColor)' }}>
-        <ShellBar primaryTitle="ZGS Finance" secondaryTitle="Journal Entry Analytics" />
+        <ShellBar primaryTitle="ZGS Finance" secondaryTitle={active.text}>
+          {PAGES.map(p => (
+            <ShellBarItem
+              key={p.key}
+              icon={p.icon}
+              text={p.text}
+              onClick={() => setPage(p.key)}
+            />
+          ))}
+        </ShellBar>
 
-        <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', maxWidth: 1280, margin: '0 auto' }}>
-
-          {/* KPI tiles */}
-          <FlexBox style={{ gap: '1rem', flexWrap: 'wrap' }}>
-            <Kpi icon="money-bills" label="Net Amount (THB)" value={fmt(m.net)} sub="Debit − Credit" />
-            <Kpi icon="trend-up" label="Debit Total" value={fmt(m.debit)} sub="Positive postings" accent="var(--sapPositiveColor)" />
-            <Kpi icon="trend-down" label="Credit Total" value={fmt(m.credit)} sub="Negative postings" accent="var(--sapNegativeColor)" />
-            <Kpi icon="list" label="Journal Entries" value={fmt(m.count)} sub={`${m.companies} company`} accent="var(--sapInformativeColor)" />
-          </FlexBox>
-
-          {/* Charts */}
-          <FlexBox style={{ gap: '1rem', flexWrap: 'wrap' }}>
-            <Card header={<CardHeader titleText="Amount by Period" subtitleText="ยอดสุทธิต่องวด" />} style={{ flex: '2 1 420px' }}>
-              <div style={{ padding: '0.5rem', height: 300 }}>
-                <BarChart dataset={m.byPeriod} dimensions={[{ accessor: 'Period' }]} measures={[{ accessor: 'Amount', label: 'Amount' }]} />
-              </div>
-            </Card>
-            <Card header={<CardHeader titleText="Debit vs Credit" subtitleText="สัดส่วน" />} style={{ flex: '1 1 280px' }}>
-              <div style={{ padding: '0.5rem', height: 300 }}>
-                <DonutChart dataset={m.dir} dimension={{ accessor: 'name' }} measure={{ accessor: 'val' }} />
-              </div>
-            </Card>
-          </FlexBox>
-
-          {/* Filter */}
-          <Card>
-            <div style={{ padding: '0.85rem 1.15rem', display: 'flex', gap: '0.7rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <Icon name="business-objects-experience" style={{ color: 'var(--sapContent_IconColor)' }} />
-              <Label for="cc">Company Code</Label>
-              <Input id="cc" value={company} placeholder="e.g. 6810" onInput={(e) => setCompany(e.target.value)} />
-              <Button design="Emphasized" onClick={() => load(company)}>Go</Button>
-              <Button design="Transparent" onClick={() => { setCompany(''); load('') }}>Reset</Button>
-              <span style={{ marginLeft: 'auto', color: 'var(--sapNeutralColor)', fontSize: 13 }}>{m.count} rows</span>
-            </div>
-          </Card>
-
-          {/* Table */}
-          <div>
-            <Title level="H4" style={{ marginBottom: '0.5rem' }}>Journal Entries</Title>
-            <AnalyticalTable columns={columns} data={rows} loading={busy} visibleRows={10} minRows={5} filterable sortable alternateRowColor />
-          </div>
-
+        {/* แถบสลับหน้า — เห็นชัดกว่าไอคอนใน ShellBar อย่างเดียว */}
+        <div style={{
+          display: 'flex', gap: '0.25rem', padding: '0 1.25rem',
+          borderBottom: '1px solid var(--sapGroup_ContentBorderColor)',
+          background: 'var(--sapObjectHeader_Background)'
+        }}>
+          {PAGES.map(p => {
+            const on = p.key === page
+            return (
+              <button
+                key={p.key}
+                onClick={() => setPage(p.key)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '0.45rem',
+                  padding: '0.7rem 1rem', border: 'none', cursor: 'pointer',
+                  background: 'transparent', font: 'inherit',
+                  color: on ? 'var(--sapSelectedColor)' : 'var(--sapContent_LabelColor)',
+                  borderBottom: `3px solid ${on ? 'var(--sapSelectedColor)' : 'transparent'}`
+                }}
+              >
+                <Icon name={p.icon} />
+                {p.text}
+              </button>
+            )
+          })}
         </div>
+
+        {/* mount ทั้งสองหน้าไว้ แล้วซ่อนหน้าที่ไม่ได้ใช้ → สลับแท็บแล้วไม่โหลดข้อมูลใหม่ */}
+        {PAGES.map(p => (
+          <div key={p.key} style={{ display: p.key === page ? 'block' : 'none' }}>{p.el}</div>
+        ))}
       </div>
     </ThemeProvider>
   )

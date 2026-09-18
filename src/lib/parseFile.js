@@ -1,0 +1,115 @@
+/**
+ * parseFile.js — อ่านไฟล์ CSV / Excel ในเบราว์เซอร์ → rows พร้อมส่งเข้า action uploadInvoiceBatch
+ *
+ * ทำ 2 อย่าง:
+ *   1) parse ไฟล์ (papaparse สำหรับ CSV · SheetJS สำหรับ .xlsx/.xls)
+ *   2) map header ของไฟล์ → ชื่อ property ตาม type InvoiceRow ใน CAP
+ *
+ * หมายเหตุ: ฝั่ง CAP (srv/lib/invoice-transform.js) ยังมี alias map ของตัวเองอีกชั้น
+ * ไว้รองรับ caller อื่น (integration/Postman ที่ส่งชื่อ field แบบ SAP เช่น bukrs, ebeln)
+ * — ที่นี่แปลงก่อนเพราะ OData v4 ยึดชื่อ property ตาม type ที่ประกาศไว้
+ */
+import Papa from 'papaparse'
+import * as XLSX from 'xlsx'
+
+/** header ที่ template แนะนำ (ลำดับคอลัมน์ในไฟล์ตัวอย่าง) */
+export const TEMPLATE_HEADERS = [
+    'Vendor Code', 'Company Code', 'Document Date', 'Posting Date',
+    'Currency', 'Gross Amount', 'PO Number', 'PO Item'
+]
+
+/** ทำ key ให้เทียบง่าย: ตัดช่องว่าง/ขีด/จุด + ตัวเล็ก (ตรงกับ canon() ฝั่ง CAP) */
+const canon = (s) => String(s ?? '').toLowerCase().replace(/[\s_\-.()]/g, '')
+
+/** header ที่ยอมรับ → ชื่อ property ของ InvoiceRow */
+const FIELD_ALIASES = {
+    vendorCode: ['vendorcode', 'vendor', 'supplier', 'suppliercode', 'invoicingparty'],
+    companyCode: ['companycode', 'company', 'bukrs'],
+    documentDate: ['documentdate', 'docdate', 'invoicedate'],
+    postingDate: ['postingdate', 'postdate'],
+    currency: ['currency', 'documentcurrency', 'waers'],
+    grossAmount: ['grossamount', 'amount', 'invoicegrossamount', 'total'],
+    purchaseOrder: ['ponumber', 'purchaseorder', 'po', 'ebeln'],
+    purchaseOrderItem: ['poitem', 'purchaseorderitem', 'poitemno', 'ebelp'],
+    glAccount: ['glaccount', 'gl', 'account', 'hkont']
+}
+
+/** Date object → 'YYYY-MM-DD' (กัน timezone เลื่อนวัน) */
+const dateToIso = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/** ทุกค่าที่ส่งไป CAP เป็น string (type InvoiceRow ประกาศเป็น String ทุกช่องโดยเจตนา) */
+function toText(v) {
+    if (v == null) return ''
+    if (v instanceof Date) return isNaN(v) ? '' : dateToIso(v)
+    return String(v).trim()
+}
+
+/** raw row (key = header ในไฟล์) → InvoiceRow */
+export function mapRow(raw) {
+    const byCanon = {}
+    for (const [k, v] of Object.entries(raw || {})) byCanon[canon(k)] = v
+
+    const row = {}
+    for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
+        const hit = aliases.find(a => byCanon[a] !== undefined && toText(byCanon[a]) !== '')
+        row[field] = hit ? toText(byCanon[hit]) : ''
+    }
+    return row
+}
+
+/** header ในไฟล์ที่ไม่ตรง alias ไหนเลย → เอาไปเตือนผู้ใช้ */
+export function unknownHeaders(raw) {
+    const known = new Set(Object.values(FIELD_ALIASES).flat())
+    return Object.keys(raw || {}).filter(h => h && !known.has(canon(h)))
+}
+
+/**
+ * parse ไฟล์ → { rows, raw, skipped }
+ *   rows    = InvoiceRow[] พร้อมส่งเข้า action
+ *   raw     = แถวดิบ (ใช้โชว์ preview / หา header ที่ไม่รู้จัก)
+ *   skipped = จำนวนแถวว่างที่ข้ามไป
+ */
+export async function parseFile(file) {
+    const ext = (file.name.split('.').pop() || '').toLowerCase()
+    let raw
+
+    if (ext === 'csv' || ext === 'txt') {
+        raw = await new Promise((resolve, reject) => {
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: 'greedy',
+                transformHeader: (h) => String(h || '').trim(),
+                complete: (r) => resolve(r.data),
+                error: reject
+            })
+        })
+    } else if (ext === 'xlsx' || ext === 'xls') {
+        const wb = XLSX.read(await file.arrayBuffer(), { cellDates: true })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        if (!ws) throw new Error('ไม่พบ sheet ในไฟล์')
+        raw = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true })
+    } else {
+        throw new Error(`ไม่รองรับไฟล์ .${ext} — ใช้ .csv, .xlsx หรือ .xls`)
+    }
+
+    // ตัดแถวที่ทุกช่องว่าง
+    const before = raw.length
+    raw = raw.filter(r => Object.values(r).some(v => toText(v) !== ''))
+
+    return { rows: raw.map(mapRow), raw, skipped: before - raw.length }
+}
+
+/** สร้างไฟล์ template ให้ผู้ใช้ดาวน์โหลด */
+export function downloadTemplate() {
+    const csv = [
+        TEMPLATE_HEADERS.join(','),
+        '1000001,6810,2026-09-18,2026-09-18,THB,1070.00,4500000123,10'
+    ].join('\r\n')
+    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'supplier-invoice-template.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+}
