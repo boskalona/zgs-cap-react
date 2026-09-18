@@ -12,10 +12,17 @@
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 
-/** header ที่ template แนะนำ (ลำดับคอลัมน์ในไฟล์ตัวอย่าง) */
+/** header ที่ต้องมี (PO-based) */
 export const TEMPLATE_HEADERS = [
     'Vendor Code', 'Company Code', 'Document Date', 'Posting Date',
     'Currency', 'Gross Amount', 'PO Number', 'PO Item'
+]
+
+/** header ที่ใส่ก็ได้ไม่ใส่ก็ได้ — account assignment
+ *  ไม่กรอก = ให้ S/4 ใช้ของ PO ตามปกติ (ปลอดภัยที่สุด)
+ *  💡 FI Segment ไม่ต้องกรอก — S/4 derive จาก Profit Center ให้เอง */
+export const OPTIONAL_HEADERS = [
+    'Profit Center', 'Cost Center', 'WBS Element', 'Internal Order', 'Profitability Segment'
 ]
 
 /** ทำ key ให้เทียบง่าย: ตัดช่องว่าง/ขีด/จุด + ตัวเล็ก (ตรงกับ canon() ฝั่ง CAP) */
@@ -31,7 +38,13 @@ const FIELD_ALIASES = {
     grossAmount: ['grossamount', 'amount', 'invoicegrossamount', 'total'],
     purchaseOrder: ['ponumber', 'purchaseorder', 'po', 'ebeln'],
     purchaseOrderItem: ['poitem', 'purchaseorderitem', 'poitemno', 'ebelp'],
-    glAccount: ['glaccount', 'gl', 'account', 'hkont']
+    glAccount: ['glaccount', 'gl', 'account', 'hkont'],
+    // account assignment (ไม่บังคับ)
+    profitCenter: ['profitcenter', 'pc', 'prctr'],
+    costCenter: ['costcenter', 'cc2', 'kostl'],
+    wbsElement: ['wbselement', 'wbs', 'posid', 'projectelement'],
+    internalOrder: ['internalorder', 'order', 'aufnr'],
+    profitabilitySegment: ['profitabilitysegment', 'profitsegment', 'copa', 'paobjnr', 'rkeobjnr']
 }
 
 /** Date object → 'YYYY-MM-DD' (กัน timezone เลื่อนวัน) */
@@ -103,8 +116,11 @@ export async function parseFile(file) {
 /** สร้างไฟล์ template ให้ผู้ใช้ดาวน์โหลด */
 export function downloadTemplate() {
     const csv = [
-        TEMPLATE_HEADERS.join(','),
-        '1000001,6810,2026-09-18,2026-09-18,THB,1070.00,4500000123,10'
+        [...TEMPLATE_HEADERS, ...OPTIONAL_HEADERS].join(','),
+        // แถวตัวอย่าง 1: ไม่กรอก account assignment → ใช้ของ PO (ปกติใช้แบบนี้)
+        '1000001,6810,2026-09-18,2026-09-18,THB,1070.00,4500000123,10,,,,,',
+        // แถวตัวอย่าง 2: ระบุ Profit Center เอง (Segment จะ derive ตามให้)
+        '1000002,6810,2026-09-18,2026-09-18,THB,2500.00,4500000124,20,1301,,,,'
     ].join('\r\n')
     const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }))
     const a = document.createElement('a')

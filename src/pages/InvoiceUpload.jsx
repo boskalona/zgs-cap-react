@@ -3,7 +3,7 @@ import {
   Card, CardHeader, AnalyticalTable, FlexBox, Title, Text, Label, Button, ObjectStatus,
   Icon, MessageStrip, ProgressIndicator, BusyIndicator, List, ListItemStandard
 } from '@ui5/webcomponents-react'
-import { parseFile, unknownHeaders, downloadTemplate, TEMPLATE_HEADERS } from '../lib/parseFile'
+import { parseFile, unknownHeaders, downloadTemplate, TEMPLATE_HEADERS, OPTIONAL_HEADERS } from '../lib/parseFile'
 import { uploadInvoiceBatch, processInvoiceBatch, retryFailedItems, getBatch, getItems, getBatches } from '../lib/api'
 
 const fmt2 = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -24,7 +24,12 @@ const previewColumns = [
   { Header: 'Curr', accessor: 'currency', width: 70 },
   { Header: 'Amount', accessor: 'grossAmount', width: 120, hAlign: 'End' },
   { Header: 'PO', accessor: 'purchaseOrder', width: 120 },
-  { Header: 'Item', accessor: 'purchaseOrderItem', width: 70 }
+  { Header: 'Item', accessor: 'purchaseOrderItem', width: 70 },
+  { Header: 'Profit Ctr', accessor: 'profitCenter', width: 100 },
+  { Header: 'Cost Ctr', accessor: 'costCenter', width: 90 },
+  { Header: 'WBS', accessor: 'wbsElement', width: 110 },
+  { Header: 'Int. Order', accessor: 'internalOrder', width: 100 },
+  { Header: 'COPA Seg.', accessor: 'profitabilitySegment', width: 100 }
 ]
 
 /** คอลัมน์ผลลัพธ์ต่อแถว — สถานะ + เลขเอกสาร S/4 + error */
@@ -40,6 +45,10 @@ const itemColumns = [
   {
     Header: 'Amount', accessor: 'grossAmount', width: 110, hAlign: 'End',
     Cell: ({ value }) => fmt2(value)
+  },
+  {
+    Header: 'Profit Ctr', accessor: 'profitCenter', width: 100,
+    Cell: ({ value }) => value || <Text style={{ color: 'var(--sapNeutralColor)' }}>ตาม PO</Text>
   },
   {
     Header: 'S/4 Invoice', accessor: 's4InvoiceDocNo', width: 130,
@@ -192,7 +201,11 @@ export default function InvoiceUpload() {
           {parsed && <Text>{parsed.fileName} — <b>{parsed.rows.length}</b> แถว</Text>}
         </FlexBox>
         <Text style={{ display: 'block', marginTop: '0.5rem', color: 'var(--sapNeutralColor)', fontSize: 12 }}>
-          คอลัมน์ที่ต้องมี (PO-based): {TEMPLATE_HEADERS.join(' · ')}
+          <b>คอลัมน์ที่ต้องมี</b> (PO-based): {TEMPLATE_HEADERS.join(' · ')}
+        </Text>
+        <Text style={{ display: 'block', marginTop: '0.25rem', color: 'var(--sapNeutralColor)', fontSize: 12 }}>
+          <b>ใส่ก็ได้</b>: {OPTIONAL_HEADERS.join(' · ')} — ไม่กรอก = ใช้ account assignment ของ PO ตามปกติ
+          {' · '}ไม่ต้องกรอก Segment (S/4 derive จาก Profit Center ให้เอง)
         </Text>
       </Step>
 
